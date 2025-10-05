@@ -5,7 +5,7 @@ import { defineConfig } from './src/helpers/config-helper';
 
 export default defineConfig({
   lang: 'en-US',
-  site: 'https://github.com/LorenzoHzK/meu-blog.git',
+  site: 'https://lorenzohzk.github.io/meu-blog',
   avatar: '/avatar.png',
   title: 'Meu blog',
   description: 'Neste blog pretendo colocar algumas informações, e também colocar algumas coisas que eu estou estudando ao longo da minha jornada',

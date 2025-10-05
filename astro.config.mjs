@@ -11,7 +11,6 @@ import codeImport from 'remark-code-import';
 import remarkBlockContainers from 'remark-block-containers';
 import astroExpressiveCode from 'astro-expressive-code';
 import rehypeFigure from 'rehype-figure';
-
 import { remarkModifiedTime } from './plugins/remark-modified-time';
 import { remarkReadingTime } from './plugins/remark-reading-time';
 import slateConfig from './slate.config';
@@ -23,20 +22,19 @@ function computedIntegrations() {
     react(),
     sitemap(slateConfig.sitemap),
   ];
-
   return result;
 }
 
 function generateAstroConfigure() {
   const astroConfig = {
     site: slateConfig.site,
+    base: '/meu-blog', // Adicione o base aqui
     integrations: computedIntegrations(),
     markdown: {
       remarkPlugins: [
         remarkGemoji,
         remarkMath,
         codeImport,
-        // [codesandbox, { mode: 'button' }],
         remarkBlockContainers,
       ],
       rehypePlugins: [rehypeKatex, rehypeFigure],
@@ -49,7 +47,6 @@ function generateAstroConfigure() {
   if (slateConfig.lastModified) {
     astroConfig.markdown.remarkPlugins.push(remarkModifiedTime);
   }
-
   if (slateConfig.readTime) {
     astroConfig.markdown.remarkPlugins.push(remarkReadingTime);
   }
@@ -58,9 +55,4 @@ function generateAstroConfigure() {
 }
 
 // https://astro.build/config
-export default defineConfig(
-  generateAstroConfigure({
-    site: 'https://lorenzohzk.github.io',
-    base: '/meu-blog', // Nome do seu repositório
-  }),
-);
+export default defineConfig(generateAstroConfigure());
