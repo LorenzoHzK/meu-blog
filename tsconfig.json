@@ -13,10 +13,10 @@
     "strictNullChecks": true,
     "baseUrl": ".",
     "jsx": "react-jsx",
-    "paths": {
-      "@/*": ["src/*"],
-      "~@/*": ["./*"]
-    },
     "jsxImportSource": "react",
+    "paths": {
+      "@/*": ["./src/*"],
+      "~@/*": ["./*"]
+    }
   }
 }

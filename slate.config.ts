@@ -5,10 +5,10 @@ import { defineConfig } from './src/helpers/config-helper';
 
 export default defineConfig({
   lang: 'en-US',
-  site: 'https://slate-blog-demo.vercel.app',
+  site: 'https://github.com/LorenzoHzK/meu-blog.git',
   avatar: '/avatar.png',
-  title: 'Slate Blog',
-  description: 'Pure thoughts, simple stories.',
+  title: 'Meu blog',
+  description: 'Neste blog pretendo colocar algumas informações, e também colocar algumas coisas que eu estou estudando ao longo da minha jornada',
   lastModified: true,
   readTime: true,
   footer: {
@@ -17,7 +17,7 @@ export default defineConfig({
   socialLinks: [
     {
       icon: 'github',
-      link: 'https://github.com/SlateDesign/slate-blog'
+      link: 'https://github.com/lorenzohzk'
     },
 ]
 });

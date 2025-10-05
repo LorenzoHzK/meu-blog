@@ -1,7 +1,7 @@
 import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
 import svgr from 'vite-plugin-svgr';
-import tailwindcss from "@tailwindcss/vite";
+import tailwindcss from '@tailwindcss/vite';
 import mdx from '@astrojs/mdx';
 import sitemap from '@astrojs/sitemap';
 import remarkGemoji from 'remark-gemoji';
@@ -17,7 +17,12 @@ import { remarkReadingTime } from './plugins/remark-reading-time';
 import slateConfig from './slate.config';
 
 function computedIntegrations() {
-  const result = [astroExpressiveCode(), mdx(), react(), sitemap(slateConfig.sitemap)];
+  const result = [
+    astroExpressiveCode(),
+    mdx(),
+    react(),
+    sitemap(slateConfig.sitemap),
+  ];
 
   return result;
 }
@@ -37,10 +42,7 @@ function generateAstroConfigure() {
       rehypePlugins: [rehypeKatex, rehypeFigure],
     },
     vite: {
-      plugins: [
-        svgr(),
-        tailwindcss(),
-      ],
+      plugins: [svgr(), tailwindcss()],
     },
   };
 
@@ -56,4 +58,9 @@ function generateAstroConfigure() {
 }
 
 // https://astro.build/config
-export default defineConfig(generateAstroConfigure());
+export default defineConfig(
+  generateAstroConfigure({
+    site: 'https://lorenzohzk.github.io',
+    base: '/meu-blog', // Nome do seu repositório
+  }),
+);
