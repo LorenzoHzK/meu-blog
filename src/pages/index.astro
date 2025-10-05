@@ -3,8 +3,9 @@ import { getCollection } from 'astro:content';
 import i18next from '@/i18n';
 import Search from '@/components/search';
 import PageLayout from '@/components/layouts/PageLayout.astro';
-// import Button from '@/components/button';
 import slateConfig from '~@/slate.config';
+
+const base = import.meta.env.BASE_URL; // Adicione esta linha
 
 const postCollection = await getCollection('post', ({ data }) => {
   return import.meta.env.DEV || data.draft !== true;
@@ -16,7 +17,6 @@ const tagCounts = postCollection.reduce<Record<string, number>>(
     if (!postTags || !postTags.length) return res;
     postTags.forEach((tag) => {
       if (tag.trim() === '') return;
-
       if (res[tag]) {
         res[tag]++;
       } else {
@@ -40,7 +40,7 @@ const posts = [...postCollection]
   .map((post) => ({
     id: post.id,
     slug: post.slug,
-    url: `/blog/${post.slug}`,
+    url: `/meu-blog/blog/${post.slug}`, // Mantenha /blog/ no caminho
     data: post.data,
   }));
 ---

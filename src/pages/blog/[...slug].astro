@@ -13,11 +13,12 @@ import { getFullTitle } from '@/helpers/utils';
 import 'remark-block-containers/css';
 import '@/assets/style/blog.css';
 
+const base = import.meta.env.BASE_URL; // Adicione esta linha
+
 export async function getStaticPaths() {
   const postEntries = await getCollection('post', ({ data }) => {
     return import.meta.env.DEV || data.draft !== true;
   });
-
   return postEntries.map((post) => ({
     params: { slug: post.slug },
     props: post,
@@ -94,13 +95,12 @@ const formattedPubDate = pubDate.isSame(dayjs(), 'year')
   <!-- E 目录 -->
 </PageLayout>
 
-<script src="//unpkg.com/heti/umd/heti-addon.min.js" is:inline></script>
-<script>
+<script define:vars={{ base }}>
   const backBtn = document.getElementById('back');
   backBtn?.addEventListener('click', () => {
-    window.location.href = '/';
+    window.location.href = base; // Use a variável base
   });
-
+  
   const heti = new Heti('.blog-content');
   heti.autoSpacing();
 </script>
