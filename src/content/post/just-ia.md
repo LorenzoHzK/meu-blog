@@ -1,6 +1,6 @@
 ---
-title: Minha Experiência Testando IAs como GPT, Claude e Gemini
-description: Minha opnião testando algumas LLMS
+title: "Minha Experiência Testando IAs como GPT, Claude e Gemini"
+description: "Minha opinião testando algumas LLMs"
 tags:
   - IA
   - Claude
