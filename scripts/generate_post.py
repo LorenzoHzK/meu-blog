@@ -5,6 +5,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
+# ── Config ─────────────────────────────────────────────────────────────────────
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OUTPUT_DIR = "src/content/post"
 
@@ -17,6 +18,7 @@ RSS_FEEDS = [
 MAX_POSTS = 4
 
 
+# ── Utils ──────────────────────────────────────────────────────────────────────
 def fetch_url(url):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=15) as resp:
@@ -33,12 +35,19 @@ def fetch_rss_items(feed_url, limit=5):
             title = item.findtext("title", "").strip()
             desc = item.findtext("description", "").strip()
             link = item.findtext("link", "").strip()
+
             if title and link:
-                items.append({"title": title, "description": desc[:500], "link": link})
+                items.append({
+                    "title": title,
+                    "description": desc[:500],
+                    "link": link
+                })
+
             if len(items) >= limit:
                 break
 
         return items
+
     except Exception as e:
         print(f"[erro RSS] {e}")
         return []
@@ -71,7 +80,12 @@ Responda em JSON:
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
     try:
-        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json"}
+        )
+
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode())
 
@@ -87,19 +101,40 @@ Responda em JSON:
 
 def slugify(text):
     text = text.lower()
+    text = re.sub(r"[áàãâä]", "a", text)
+    text = re.sub(r"[éèêë]", "e", text)
+    text = re.sub(r"[íìîï]", "i", text)
+    text = re.sub(r"[óòõôö]", "o", text)
+    text = re.sub(r"[úùûü]", "u", text)
+    text = re.sub(r"[ç]", "c", text)
     text = re.sub(r"[^a-z0-9]+", "-", text)
     return text.strip("-")[:60]
 
 
+# 🔥 FUNÇÃO CRÍTICA — evita quebrar YAML
+def safe_yaml(text: str) -> str:
+    if not text:
+        return ""
+    text = str(text)
+    text = text.replace('"', '\\"')
+    text = text.replace("\n", " ")
+    text = text.replace(":", " -")  # evita quebra de YAML
+    return text.strip()
+
+
 def write_post(post):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    slug = slugify(post["title"])
 
-    tags = "\n".join(f"  - {t}" for t in post.get("tags", ["tecnologia"]))
+    title = safe_yaml(post["title"])
+    description = safe_yaml(post["description"])
+    slug = slugify(title)
+
+    tags_list = post.get("tags", ["tecnologia"])
+    tags = "\n".join(f"  - \"{safe_yaml(t)}\"" for t in tags_list)
 
     content = f"""---
-title: {post['title']}
-description: {post['description']}
+title: "{title}"
+description: "{description}"
 tags:
 {tags}
 pubDate: {today}
@@ -126,20 +161,22 @@ def fallback_post(item):
     }
 
 
+# ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     all_items = []
 
     for feed in RSS_FEEDS:
         all_items.extend(fetch_rss_items(feed, 3))
 
-    used = set()
+    seen = set()
     selected = []
 
     for item in all_items:
         key = item["title"][:80]
-        if key not in used:
-            used.add(key)
+        if key not in seen:
+            seen.add(key)
             selected.append(item)
+
         if len(selected) >= MAX_POSTS:
             break
 
@@ -148,7 +185,13 @@ def main():
     count = 0
 
     for item in selected:
-        result = rewrite_with_gemini(item["title"], item["description"], item["link"])
+        print(f"Processando: {item['title'][:60]}...")
+
+        result = rewrite_with_gemini(
+            item["title"],
+            item["description"],
+            item["link"]
+        )
 
         if not result:
             print("[fallback usado]")
@@ -157,7 +200,7 @@ def main():
         write_post(result)
         count += 1
 
-    print(f"{count} posts gerados")
+    print(f"{count} posts gerados com sucesso")
 
 
 if __name__ == "__main__":
