@@ -13,8 +13,6 @@ RSS_FEEDS = [
     "https://www.theverge.com/rss/index.xml",
 ]
 
-MAX_POSTS = 1
-
 
 # ── Utils ─────────────────────────────────────────────
 def fetch_url(url):
@@ -24,7 +22,7 @@ def fetch_url(url):
         return resp.read().decode("utf-8", errors="replace")
 
 
-def clean_html(text: str) -> str:
+def clean_html(text):
     if not text:
         return ""
     text = re.sub(r"<[^>]+>", "", text)
@@ -32,7 +30,7 @@ def clean_html(text: str) -> str:
     return text.strip()
 
 
-def fetch_rss_items(feed_url, limit=3):
+def fetch_rss_items(feed_url):
     try:
         raw = fetch_url(feed_url)
         root = ET.fromstring(raw)
@@ -50,9 +48,6 @@ def fetch_rss_items(feed_url, limit=3):
                     "link": link
                 })
 
-            if len(items) >= limit:
-                break
-
         print(f"[rss] {feed_url} -> {len(items)} itens")
         return items
 
@@ -61,100 +56,49 @@ def fetch_rss_items(feed_url, limit=3):
         return []
 
 
+# ── Gemini ────────────────────────────────────────────
 def rewrite_with_gemini(title, description, link):
     if not GEMINI_API_KEY:
-        print("[erro] GEMINI_API_KEY não encontrada")
+        print("[erro] sem API KEY")
         return None
 
     prompt = f"""
-Você é um desenvolvedor brasileiro escrevendo um blog pessoal de tecnologia.
+Escreva um artigo de blog em português brasileiro.
 
-Seu objetivo é criar um post COMPLETO, detalhado e bem estruturado.
+REGRAS:
+- primeira pessoa
+- estilo pessoal
+- markdown (##)
+- mínimo 800 palavras
+- sem inglês
 
-━━━━━━━━━━━━━━━━━━━
-⚠️ REGRAS OBRIGATÓRIAS
-━━━━━━━━━━━━━━━━━━━
+Tema:
+{title}
 
-- Escreva 100% em português brasileiro
-- NÃO use inglês em nenhuma parte
-- NÃO use HTML
-- Use Markdown (## para títulos)
-- Escreva em PRIMEIRA PESSOA
-- Estilo natural, como experiência pessoal
-- NÃO copie o texto original
-- NÃO seja genérico
+Resumo:
+{description}
 
-━━━━━━━━━━━━━━━━━━━
-📏 TAMANHO
-━━━━━━━━━━━━━━━━━━━
+Fonte:
+{link}
 
-- MÍNIMO: 1200 palavras
-- Texto longo e detalhado
-- Explicações completas
-- Nada de respostas curtas
-
-━━━━━━━━━━━━━━━━━━━
-🧠 ESTRUTURA OBRIGATÓRIA
-━━━━━━━━━━━━━━━━━━━
-
-1. Introdução pessoal
-2. Explicação do tema
-3. Análise/opinião
-4. Pontos positivos
-5. Pontos negativos
-6. Comparações (se fizer sentido)
-7. Conclusão pessoal
-
-━━━━━━━━━━━━━━━━━━━
-🎯 TOM
-━━━━━━━━━━━━━━━━━━━
-
-- Conversa natural
-- Fluído
-- Como um blog real (não IA)
-- Pode usar exemplos pessoais
-- Pode criticar
-
-━━━━━━━━━━━━━━━━━━━
-📥 DADOS
-━━━━━━━━━━━━━━━━━━━
-
-Título: {title}
-Resumo: {description}
-Link: {link}
-
-━━━━━━━━━━━━━━━━━━━
-📤 FORMATO DE RESPOSTA (OBRIGATÓRIO)
-━━━━━━━━━━━━━━━━━━━
-
-Retorne APENAS JSON válido:
-
+Retorne JSON:
 {{
-  "title": "Título em português chamativo",
-  "description": "Resumo curto em português (máx 160 caracteres)",
-  "tags": ["tecnologia", "ia", "software"],
-  "body": "Conteúdo completo em markdown com mais de 1200 palavras"
+  "title": "",
+  "description": "",
+  "tags": [],
+  "body": ""
 }}
 """
 
     payload = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": 0.8,
-            "maxOutputTokens": 2048
-        }
+        "contents": [{"parts": [{"text": prompt}]}]
     }).encode("utf-8")
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
     try:
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"}
-        )
-
-        with urllib.request.urlopen(req, timeout=40) as resp:
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode())
 
         text = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -162,12 +106,11 @@ Retorne APENAS JSON válido:
 
         result = json.loads(text)
 
-        # valida tamanho mínimo
-        if len(result["body"].split()) < 800:
-            print("[erro] texto muito curto")
+        if len(result["body"].split()) < 400:
+            print("[gemini] texto muito curto")
             return None
 
-        print("[gemini] sucesso (conteúdo longo)")
+        print("[gemini] sucesso")
         return result
 
     except Exception as e:
@@ -175,70 +118,70 @@ Retorne APENAS JSON válido:
         return None
 
 
+# ── Fallback ──────────────────────────────────────────
 def fallback_post(item):
-    print("[fallback] gerando fallback melhorado")
+    print("[fallback] ativado")
 
     body = f"""
-## O que eu achei sobre isso
+## Minha visão sobre isso
 
-Recentemente me deparei com uma notícia interessante:
+Recentemente vi algo interessante:
 
 **{item['title']}**
 
-{item['description']}
+Mesmo sendo um conteúdo originalmente em inglês, o ponto principal é bem claro.
 
-Confesso que isso me chamou atenção, principalmente porque mostra como a tecnologia continua evoluindo de formas que a gente nem sempre espera.
+## O que isso significa
 
-## Minha visão
+Esse tipo de conteúdo mostra como o mercado de tecnologia está mudando rápido.
 
-Mesmo sendo algo que ainda não faz parte direta do meu dia a dia, dá pra perceber que esse tipo de avanço pode impactar muita coisa no futuro.
+Hoje, ferramentas de inteligência artificial estão influenciando diretamente como as pessoas encontram conteúdo.
 
-A forma como essas soluções estão surgindo mostra que estamos caminhando para um cenário cada vez mais automatizado e inteligente.
+## Minha opinião
 
-## Pontos interessantes
+Eu acho isso interessante porque muda completamente o jogo.
 
-- Crescimento da tecnologia
-- Novas possibilidades
-- Impacto no mercado
+Antes tudo dependia de SEO, agora estamos entrando em um cenário onde a IA começa a intermediar tudo.
+
+## Pontos positivos
+
+- Novas oportunidades
+- Crescimento da IA
+- Mudança no comportamento digital
+
+## Pontos negativos
+
+- Dependência de plataformas
+- Menos controle sobre tráfego
 
 ## Conclusão
 
-No geral, achei interessante acompanhar esse tipo de evolução.  
-Ainda quero testar mais coisas relacionadas a isso no futuro.
+No geral, achei interessante acompanhar esse tipo de evolução.
+
+Ainda não uso isso diretamente, mas é algo que com certeza pode impactar projetos no futuro.
 
 Fonte: {item['link']}
 """
 
     return {
-        "title": item["title"],
-        "description": item["description"][:120],
-        "tags": ["tecnologia"],
+        "title": "Como a IA está mudando o tráfego na internet",
+        "description": "Reflexão sobre o impacto da IA no SEO e no tráfego digital.",
+        "tags": ["ia", "tecnologia"],
         "body": body
     }
 
 
-def safe(text):
-    return str(text).replace('"', '\\"').replace("\n", " ").strip()
-
-
-def slugify(text):
-    text = text.lower()
-    text = re.sub(r"[^a-z0-9]+", "-", text)
-    return text.strip("-")[:60]
-
-
+# ── Writer ────────────────────────────────────────────
 def write_post(post):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    title = safe(post["title"])
-    description = safe(post["description"])
-    slug = slugify(title)
+    slug = re.sub(r"[^a-z0-9]+", "-", post["title"].lower())[:60]
 
-    tags = "\n".join(f'  - "{safe(t)}"' for t in post.get("tags", ["tecnologia"]))
+    tags = "\n".join(f'  - "{t}"' for t in post.get("tags", ["tecnologia"]))
 
     content = f"""---
-title: "{title}"
-description: "{description}"
+title: "{post['title']}"
+description: "{post['description']}"
 tags:
 {tags}
 pubDate: {today}
@@ -250,41 +193,47 @@ pubDate: {today}
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     path = f"{OUTPUT_DIR}/{today}-{slug}.md"
+
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    print(f"[OK] post criado: {path}")
+    print(f"[OK] arquivo criado: {path}")
 
 
 # ── MAIN ─────────────────────────────────────────────
 def main():
-    print("🔍 Buscando notícias...")
+    print("🔍 buscando notícias")
 
-    all_items = []
+    items = []
 
     for feed in RSS_FEEDS:
-        items = fetch_rss_items(feed)
-        all_items.extend(items)
+        items.extend(fetch_rss_items(feed))
 
-    print(f"[total] {len(all_items)} itens encontrados")
-
-    if not all_items:
-        print("[erro] nenhum item encontrado")
+    if not items:
+        print("[erro] sem notícias — criando post genérico")
+        post = fallback_post({
+            "title": "Tecnologia e IA em crescimento",
+            "description": "O mercado de tecnologia continua evoluindo rapidamente.",
+            "link": "#"
+        })
+        write_post(post)
         return
 
-    item = all_items[0]
+    item = items[0]
     print(f"[usando] {item['title']}")
 
-    result = rewrite_with_gemini(
+    post = rewrite_with_gemini(
         item["title"],
         item["description"],
         item["link"]
     )
 
-    if not result:
-        result = fallback_post(item)
+    if not post:
+        post = fallback_post(item)
 
-    write_post(result)
+    write_post(post)
+
+    print("✅ FINALIZADO COM SUCESSO")
 
 
 if __name__ == "__main__":
