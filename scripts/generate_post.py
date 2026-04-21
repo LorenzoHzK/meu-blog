@@ -73,21 +73,37 @@ def rewrite_with_gemini(items):
     prompt = f"""
 Você é um desenvolvedor brasileiro escrevendo um blog pessoal.
 
-REGRAS:
-- Português brasileiro obrigatório
-- Proibido inglês
-- Texto longo (mínimo 1500 palavras)
-- Estilo humano
-- Conteúdo técnico + opinião
+REGRAS OBRIGATÓRIAS:
+- Escreva 100% em português brasileiro
+- NÃO USE INGLÊS EM NENHUM MOMENTO
+- Conteúdo EXTREMAMENTE detalhado
+- Mínimo de 1500 palavras
+- Estilo humano, opinativo e técnico
 
-Estrutura:
-- Introdução
-- Para cada notícia:
-  - explicação detalhada
-  - como funciona
-  - opinião
-  - impacto
-- Conclusão
+ESTRUTURA:
+
+## Introdução
+Contextualize o cenário atual da tecnologia
+
+## Para CADA notícia:
+
+### O que aconteceu
+Explique detalhadamente
+
+### Como isso funciona
+Explique tecnicamente
+
+### Minha opinião
+Opinião real, como dev
+
+### Impacto real
+Impacto no mercado e devs
+
+### Exemplo prático
+Dê exemplo real
+
+## Conclusão
+Resumo geral com visão de futuro
 
 NOTÍCIAS:
 {noticias}
@@ -96,8 +112,8 @@ Retorne SOMENTE JSON válido:
 
 {{
   "title": "Resumo semanal de tecnologia",
-  "description": "Resumo detalhado das notícias",
-  "tags": ["tecnologia", "ia"],
+  "description": "Resumo detalhado das principais notícias da semana",
+  "tags": ["tecnologia", "ia", "programação"],
   "body": "conteúdo completo em markdown"
 }}
 """
@@ -105,13 +121,12 @@ Retorne SOMENTE JSON válido:
     payload = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
-            "temperature": 0.8,
+            "temperature": 0.9,
             "maxOutputTokens": 4096
         }
     }).encode("utf-8")
 
-    # ✅ AGORA CORRETO
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={GEMINI_API_KEY}"
 
     try:
         req = urllib.request.Request(
@@ -135,16 +150,10 @@ Retorne SOMENTE JSON válido:
             print(text)
             raise Exception("❌ Gemini não retornou JSON válido")
 
-        json_text = match.group(0)
-
-        try:
-            result = json.loads(json_text)
-        except Exception as e:
-            print(json_text)
-            raise Exception(f"❌ Erro ao parsear JSON: {e}")
+        result = json.loads(match.group(0))
 
         if len(result["body"].split()) < 800:
-            raise Exception("❌ Conteúdo muito curto")
+            raise Exception("❌ Conteúdo muito curto (IA falhou)")
 
         print("[gemini] sucesso total")
         return result
