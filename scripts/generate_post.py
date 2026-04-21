@@ -1,7 +1,9 @@
 import os
 import re
 import json
+import time
 import urllib.request
+import urllib.error
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
@@ -13,7 +15,7 @@ RSS_FEEDS = [
     "https://www.theverge.com/rss/full.xml",
 ]
 
-MAX_ITEMS = 4
+MAX_ITEMS = 3
 
 
 # ── Utils ─────────────────────────────────────────────
@@ -58,7 +60,25 @@ def fetch_rss_items(feed_url):
         return []
 
 
-# ── Gemini (OBRIGATÓRIO) ─────────────────────────────
+# ── Retry Gemini ──────────────────────────────────────
+def call_gemini_with_retry(req, retries=3):
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return json.loads(resp.read().decode())
+
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                wait = 5 * (attempt + 1)
+                print(f"[429] Rate limit... retry em {wait}s")
+                time.sleep(wait)
+            else:
+                raise e
+
+    raise Exception("❌ Falhou após retries (429)")
+
+
+# ── Gemini ────────────────────────────────────────────
 def rewrite_with_gemini(items):
     if not GEMINI_API_KEY:
         raise Exception("❌ GEMINI_API_KEY não encontrada")
@@ -74,8 +94,7 @@ def rewrite_with_gemini(items):
 Responda APENAS com JSON válido.
 
 NÃO escreva texto antes ou depois.
-NÃO use markdown.
-NÃO explique nada.
+NÃO use markdown fora do campo body.
 
 Formato obrigatório:
 
@@ -83,12 +102,12 @@ Formato obrigatório:
   "title": "...",
   "description": "...",
   "tags": ["tecnologia"],
-  "body": "texto em markdown longo"
+  "body": "conteúdo em markdown"
 }}
 
 Regras:
 - português brasileiro
-- mínimo 1200 palavras
+- mínimo 800 palavras
 - conteúdo denso
 - múltiplas seções
 
@@ -100,7 +119,8 @@ NOTÍCIAS:
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0.7,
-            "maxOutputTokens": 8192
+            "maxOutputTokens": 4096,
+            "topP": 0.9
         }
     }).encode("utf-8")
 
@@ -113,8 +133,7 @@ NOTÍCIAS:
             headers={"Content-Type": "application/json"}
         )
 
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode())
+        data = call_gemini_with_retry(req)
 
         print("[debug] resposta recebida")
 
@@ -123,11 +142,11 @@ NOTÍCIAS:
         print("[debug] resposta bruta:")
         print(text[:500])
 
-        # 🔥 tenta parse direto primeiro
+        # ── parse direto
         try:
             result = json.loads(text)
         except:
-            # 🔥 fallback: tenta extrair JSON válido manualmente
+            # ── fallback robusto
             start = text.find("{")
             end = text.rfind("}")
 
@@ -142,11 +161,11 @@ NOTÍCIAS:
                 print(json_text[:1000])
                 raise Exception(f"❌ JSON inválido: {e}")
 
-        # 🔥 valida conteúdo
+        # ── validação
         if "body" not in result:
             raise Exception("❌ JSON sem body")
 
-        if len(result["body"].split()) < 800:
+        if len(result["body"].split()) < 600:
             raise Exception("❌ Conteúdo muito curto")
 
         print("[gemini] sucesso real")
