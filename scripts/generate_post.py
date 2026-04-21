@@ -67,46 +67,107 @@ def rewrite_with_gemini(title, description, link):
         return None
 
     prompt = f"""
-Você é um desenvolvedor brasileiro escrevendo um blog pessoal.
+Você é um desenvolvedor brasileiro escrevendo um blog pessoal de tecnologia.
 
-Escreva um post em primeira pessoa, estilo experiência pessoal.
+Seu objetivo é criar um post COMPLETO, detalhado e bem estruturado.
 
-REGRAS:
-- português brasileiro
-- sem HTML
-- usar markdown (##)
-- entre 400 e 800 palavras
+━━━━━━━━━━━━━━━━━━━
+⚠️ REGRAS OBRIGATÓRIAS
+━━━━━━━━━━━━━━━━━━━
 
-DADOS:
+- Escreva 100% em português brasileiro
+- NÃO use inglês em nenhuma parte
+- NÃO use HTML
+- Use Markdown (## para títulos)
+- Escreva em PRIMEIRA PESSOA
+- Estilo natural, como experiência pessoal
+- NÃO copie o texto original
+- NÃO seja genérico
+
+━━━━━━━━━━━━━━━━━━━
+📏 TAMANHO
+━━━━━━━━━━━━━━━━━━━
+
+- MÍNIMO: 1200 palavras
+- Texto longo e detalhado
+- Explicações completas
+- Nada de respostas curtas
+
+━━━━━━━━━━━━━━━━━━━
+🧠 ESTRUTURA OBRIGATÓRIA
+━━━━━━━━━━━━━━━━━━━
+
+1. Introdução pessoal
+2. Explicação do tema
+3. Análise/opinião
+4. Pontos positivos
+5. Pontos negativos
+6. Comparações (se fizer sentido)
+7. Conclusão pessoal
+
+━━━━━━━━━━━━━━━━━━━
+🎯 TOM
+━━━━━━━━━━━━━━━━━━━
+
+- Conversa natural
+- Fluído
+- Como um blog real (não IA)
+- Pode usar exemplos pessoais
+- Pode criticar
+
+━━━━━━━━━━━━━━━━━━━
+📥 DADOS
+━━━━━━━━━━━━━━━━━━━
+
 Título: {title}
 Resumo: {description}
 Link: {link}
 
-Responda JSON:
+━━━━━━━━━━━━━━━━━━━
+📤 FORMATO DE RESPOSTA (OBRIGATÓRIO)
+━━━━━━━━━━━━━━━━━━━
+
+Retorne APENAS JSON válido:
+
 {{
-  "title": "",
-  "description": "",
-  "tags": [],
-  "body": ""
+  "title": "Título em português chamativo",
+  "description": "Resumo curto em português (máx 160 caracteres)",
+  "tags": ["tecnologia", "ia", "software"],
+  "body": "Conteúdo completo em markdown com mais de 1200 palavras"
 }}
 """
 
     payload = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}]
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.8,
+            "maxOutputTokens": 2048
+        }
     }).encode("utf-8")
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
     try:
-        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json"}
+        )
+
+        with urllib.request.urlopen(req, timeout=40) as resp:
             data = json.loads(resp.read().decode())
 
         text = data["candidates"][0]["content"]["parts"][0]["text"]
         text = re.sub(r"```json|```", "", text).strip()
 
         result = json.loads(text)
-        print("[gemini] sucesso")
+
+        # valida tamanho mínimo
+        if len(result["body"].split()) < 800:
+            print("[erro] texto muito curto")
+            return None
+
+        print("[gemini] sucesso (conteúdo longo)")
         return result
 
     except Exception as e:
@@ -115,26 +176,44 @@ Responda JSON:
 
 
 def fallback_post(item):
-    print("[fallback] usando fallback")
+    print("[fallback] gerando fallback melhorado")
 
-    return {
-        "title": item["title"],
-        "description": item["description"][:120],
-        "tags": ["tecnologia"],
-        "body": f"""### Minha visão sobre isso
+    body = f"""
+## O que eu achei sobre isso
 
-Vi recentemente essa notícia:
+Recentemente me deparei com uma notícia interessante:
 
 **{item['title']}**
 
 {item['description']}
 
-Confesso que achei interessante, principalmente porque esse tipo de coisa mostra como a tecnologia está evoluindo rápido.
+Confesso que isso me chamou atenção, principalmente porque mostra como a tecnologia continua evoluindo de formas que a gente nem sempre espera.
 
-Ainda não é algo que eu use diretamente no dia a dia, mas dá pra ver que isso pode impactar bastante coisa no futuro.
+## Minha visão
+
+Mesmo sendo algo que ainda não faz parte direta do meu dia a dia, dá pra perceber que esse tipo de avanço pode impactar muita coisa no futuro.
+
+A forma como essas soluções estão surgindo mostra que estamos caminhando para um cenário cada vez mais automatizado e inteligente.
+
+## Pontos interessantes
+
+- Crescimento da tecnologia
+- Novas possibilidades
+- Impacto no mercado
+
+## Conclusão
+
+No geral, achei interessante acompanhar esse tipo de evolução.  
+Ainda quero testar mais coisas relacionadas a isso no futuro.
 
 Fonte: {item['link']}
 """
+
+    return {
+        "title": item["title"],
+        "description": item["description"][:120],
+        "tags": ["tecnologia"],
+        "body": body
     }
 
 
