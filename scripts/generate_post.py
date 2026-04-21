@@ -13,6 +13,8 @@ RSS_FEEDS = [
     "https://www.theverge.com/rss/index.xml",
 ]
 
+MAX_ITEMS = 4
+
 
 # ── Utils ─────────────────────────────────────────────
 def fetch_url(url):
@@ -56,49 +58,95 @@ def fetch_rss_items(feed_url):
         return []
 
 
-# ── Gemini ────────────────────────────────────────────
-def rewrite_with_gemini(title, description, link):
+# ── Gemini (ULTRA DENSO) ─────────────────────────────
+def rewrite_with_gemini(items):
     if not GEMINI_API_KEY:
         print("[erro] sem API KEY")
         return None
 
+    noticias = "\n\n".join([
+        f"Título: {i['title']}\nResumo: {i['description']}\nLink: {i['link']}"
+        for i in items
+    ])
+
     prompt = f"""
-Escreva um artigo de blog em português brasileiro.
+Você é um desenvolvedor brasileiro escrevendo um blog pessoal.
 
-REGRAS:
-- primeira pessoa
-- estilo pessoal
-- markdown (##)
-- mínimo 800 palavras
-- sem inglês
+Seu objetivo NÃO é resumir notícias.
+Seu objetivo é ESCREVER UM ARTIGO PROFUNDO, detalhado e opinativo.
 
-Tema:
-{title}
+━━━━━━━━━━━━━━━━━━━
+⚠️ REGRAS ABSOLUTAS
+━━━━━━━━━━━━━━━━━━━
 
-Resumo:
-{description}
+- Escreva 100% em português brasileiro
+- Proibido usar inglês
+- Proibido escrever pouco
+- Proibido ser superficial
+- Escreva como se fosse SUA opinião real
 
-Fonte:
-{link}
+━━━━━━━━━━━━━━━━━━━
+📏 TAMANHO
+━━━━━━━━━━━━━━━━━━━
 
-Retorne JSON:
+- MÍNIMO: 2000 palavras
+- Conteúdo denso e explicativo
+
+━━━━━━━━━━━━━━━━━━━
+🧠 ESTRUTURA
+━━━━━━━━━━━━━━━━━━━
+
+## Introdução
+- Contextualização real
+
+## Para CADA notícia:
+
+### O que aconteceu
+### Como isso funciona
+### Minha opinião
+### Impacto real
+### Exemplo prático
+
+## Conclusão
+
+━━━━━━━━━━━━━━━━━━━
+📥 NOTÍCIAS
+━━━━━━━━━━━━━━━━━━━
+
+{noticias}
+
+━━━━━━━━━━━━━━━━━━━
+📤 FORMATO
+━━━━━━━━━━━━━━━━━━━
+
+Retorne JSON válido:
+
 {{
-  "title": "",
-  "description": "",
-  "tags": [],
-  "body": ""
+  "title": "Resumo semanal de tecnologia",
+  "description": "Resumo detalhado das principais notícias de tecnologia",
+  "tags": ["tecnologia", "ia"],
+  "body": "conteúdo completo em markdown"
 }}
 """
 
     payload = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}]
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.85,
+            "maxOutputTokens": 4096
+        }
     }).encode("utf-8")
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
     try:
-        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json"}
+        )
+
+        with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read().decode())
 
         text = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -106,8 +154,8 @@ Retorne JSON:
 
         result = json.loads(text)
 
-        if len(result["body"].split()) < 400:
-            print("[gemini] texto muito curto")
+        if len(result["body"].split()) < 1200:
+            print("[gemini] conteúdo fraco")
             return None
 
         print("[gemini] sucesso")
@@ -118,55 +166,41 @@ Retorne JSON:
         return None
 
 
-# ── Fallback ──────────────────────────────────────────
-def fallback_post(item):
-    print("[fallback] ativado")
+# ── Fallback MULTI ─────────────────────────────────────
+def fallback_post(items):
+    print("[fallback] multi notícia")
 
-    body = f"""
-## Minha visão sobre isso
+    body = "## Resumo semanal de tecnologia\n\n"
 
-Recentemente vi algo interessante:
+    for item in items:
+        body += f"""
+---
 
-**{item['title']}**
+## {item['title']}
 
-Mesmo sendo um conteúdo originalmente em inglês, o ponto principal é bem claro.
+### O que aconteceu
 
-## O que isso significa
+{item['description']}
 
-Esse tipo de conteúdo mostra como o mercado de tecnologia está mudando rápido.
+### Minha visão
 
-Hoje, ferramentas de inteligência artificial estão influenciando diretamente como as pessoas encontram conteúdo.
+Essa notícia mostra como a tecnologia continua evoluindo rápido.
 
-## Minha opinião
+Mesmo sendo algo simples à primeira vista, isso pode ter impacto direto no mercado.
 
-Eu acho isso interessante porque muda completamente o jogo.
+### Impacto
 
-Antes tudo dependia de SEO, agora estamos entrando em um cenário onde a IA começa a intermediar tudo.
-
-## Pontos positivos
-
-- Novas oportunidades
-- Crescimento da IA
 - Mudança no comportamento digital
-
-## Pontos negativos
-
-- Dependência de plataformas
-- Menos controle sobre tráfego
-
-## Conclusão
-
-No geral, achei interessante acompanhar esse tipo de evolução.
-
-Ainda não uso isso diretamente, mas é algo que com certeza pode impactar projetos no futuro.
+- Crescimento da IA
+- Novas oportunidades
 
 Fonte: {item['link']}
 """
 
     return {
-        "title": "Como a IA está mudando o tráfego na internet",
-        "description": "Reflexão sobre o impacto da IA no SEO e no tráfego digital.",
-        "tags": ["ia", "tecnologia"],
+        "title": "Resumo semanal de tecnologia",
+        "description": "Principais notícias da semana",
+        "tags": ["tecnologia"],
         "body": body
     }
 
@@ -175,7 +209,7 @@ Fonte: {item['link']}
 def write_post(post):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    slug = re.sub(r"[^a-z0-9]+", "-", post["title"].lower())[:60]
+    slug = "resumo-semanal-tech"
 
     tags = "\n".join(f'  - "{t}"' for t in post.get("tags", ["tecnologia"]))
 
@@ -204,36 +238,33 @@ pubDate: {today}
 def main():
     print("🔍 buscando notícias")
 
-    items = []
+    all_items = []
 
     for feed in RSS_FEEDS:
-        items.extend(fetch_rss_items(feed))
+        all_items.extend(fetch_rss_items(feed))
 
-    if not items:
-        print("[erro] sem notícias — criando post genérico")
-        post = fallback_post({
-            "title": "Tecnologia e IA em crescimento",
-            "description": "O mercado de tecnologia continua evoluindo rapidamente.",
+    if not all_items:
+        print("[erro] sem notícias")
+        post = fallback_post([{
+            "title": "Tecnologia em evolução",
+            "description": "Semana sem dados relevantes",
             "link": "#"
-        })
+        }])
         write_post(post)
         return
 
-    item = items[0]
-    print(f"[usando] {item['title']}")
+    items = all_items[:MAX_ITEMS]
 
-    post = rewrite_with_gemini(
-        item["title"],
-        item["description"],
-        item["link"]
-    )
+    print(f"[usando] {len(items)} notícias")
+
+    post = rewrite_with_gemini(items)
 
     if not post:
-        post = fallback_post(item)
+        post = fallback_post(items)
 
     write_post(post)
 
-    print("✅ FINALIZADO COM SUCESSO")
+    print("✅ FINALIZADO")
 
 
 if __name__ == "__main__":
