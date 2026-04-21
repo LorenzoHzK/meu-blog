@@ -71,62 +71,40 @@ def rewrite_with_gemini(items):
     ])
 
     prompt = f"""
-Você é um desenvolvedor brasileiro escrevendo um blog pessoal.
+Responda APENAS com JSON válido.
 
-REGRAS OBRIGATÓRIAS:
-- Escreva 100% em português brasileiro
-- NÃO USE INGLÊS EM NENHUM MOMENTO
-- Conteúdo EXTREMAMENTE detalhado
-- Mínimo de 1500 palavras
-- Estilo humano, opinativo e técnico
+NÃO escreva texto antes ou depois.
+NÃO use markdown.
+NÃO explique nada.
 
-ESTRUTURA:
+Formato obrigatório:
 
-## Introdução
-Contextualize o cenário atual da tecnologia
+{{
+  "title": "...",
+  "description": "...",
+  "tags": ["tecnologia"],
+  "body": "texto em markdown longo"
+}}
 
-## Para CADA notícia:
-
-### O que aconteceu
-Explique detalhadamente
-
-### Como isso funciona
-Explique tecnicamente
-
-### Minha opinião
-Opinião real, como dev
-
-### Impacto real
-Impacto no mercado e devs
-
-### Exemplo prático
-Dê exemplo real
-
-## Conclusão
-Resumo geral com visão de futuro
+Regras:
+- português brasileiro
+- mínimo 1200 palavras
+- conteúdo denso
+- múltiplas seções
 
 NOTÍCIAS:
 {noticias}
-
-Retorne SOMENTE JSON válido:
-
-{{
-  "title": "Resumo semanal de tecnologia",
-  "description": "Resumo detalhado das principais notícias da semana",
-  "tags": ["tecnologia", "ia", "programação"],
-  "body": "conteúdo completo em markdown"
-}}
 """
 
     payload = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
-            "temperature": 0.9,
-            "maxOutputTokens": 4096
+            "temperature": 0.7,
+            "maxOutputTokens": 8192
         }
     }).encode("utf-8")
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
     try:
         req = urllib.request.Request(
@@ -138,24 +116,40 @@ Retorne SOMENTE JSON válido:
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read().decode())
 
-        print("[debug] resposta recebida do Gemini")
+        print("[debug] resposta recebida")
 
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
-        text = re.sub(r"```json|```", "", text).strip()
+        print("[debug] resposta bruta:")
+        print(text[:500])
 
-        match = re.search(r"\{.*\}", text, re.DOTALL)
+        # 🔥 tenta parse direto primeiro
+        try:
+            result = json.loads(text)
+        except:
+            # 🔥 fallback: tenta extrair JSON válido manualmente
+            start = text.find("{")
+            end = text.rfind("}")
 
-        if not match:
-            print(text)
-            raise Exception("❌ Gemini não retornou JSON válido")
+            if start == -1 or end == -1:
+                raise Exception("❌ Nenhum JSON encontrado")
 
-        result = json.loads(match.group(0))
+            json_text = text[start:end+1]
+
+            try:
+                result = json.loads(json_text)
+            except Exception as e:
+                print(json_text[:1000])
+                raise Exception(f"❌ JSON inválido: {e}")
+
+        # 🔥 valida conteúdo
+        if "body" not in result:
+            raise Exception("❌ JSON sem body")
 
         if len(result["body"].split()) < 800:
-            raise Exception("❌ Conteúdo muito curto (IA falhou)")
+            raise Exception("❌ Conteúdo muito curto")
 
-        print("[gemini] sucesso total")
+        print("[gemini] sucesso real")
         return result
 
     except Exception as e:
