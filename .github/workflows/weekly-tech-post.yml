@@ -2,37 +2,64 @@ name: Post Semanal de Tecnologia
 
 on:
   schedule:
-    # Toda sexta-feira às 08:00 (horário de Brasília = 11:00 UTC)
     - cron: '0 11 * * 5'
-
-  # Permite rodar manualmente pelo GitHub para testar
   workflow_dispatch:
 
 jobs:
-  gerar-post:
+  gerar-e-publicar:
     runs-on: ubuntu-latest
+
     permissions:
-      contents: write # precisa para fazer commit
+      contents: write
+      pages: write
+      id-token: write
 
     steps:
       - name: Checkout do repositório
         uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Instalar dependências
+        run: pnpm install
 
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Rodar script de geração de post
+      - name: Gerar post da semana
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python scripts/generate_post.py
 
-      - name: Commit e push dos novos posts
+      # ✅ COMMIT VEM AQUI (ANTES DO BUILD)
+      - name: Salvar posts gerados no repositório
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add src/content/post/
-          # Só commita se houver arquivos novos
-          git diff --cached --quiet || git commit -m "feat(post): post automático de tecnologia $(date +'%Y-%m-%d')"
+          git diff --cached --quiet || git commit -m "feat(post): post automático $(date +'%Y-%m-%d')"
           git push
+
+      - name: Build do Astro
+        run: pnpm build
+
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload dos arquivos buildados
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+      - name: Deploy no GitHub Pages
+        uses: actions/deploy-pages@v4
