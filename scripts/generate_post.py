@@ -11,13 +11,11 @@ OUTPUT_DIR = "src/content/post"
 RSS_FEEDS = [
     "https://feeds.feedburner.com/TechCrunch",
     "https://www.theverge.com/rss/index.xml",
-    "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
 ]
 
-MAX_POSTS = 4
+MAX_POSTS = 1  # 🔥 AGORA APENAS 1 POST
 
 
-# ── Helpers ─────────────────────────────────────────────
 def fetch_url(url):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=15) as resp:
@@ -28,26 +26,25 @@ def clean_html(text: str) -> str:
     if not text:
         return ""
     text = re.sub(r"<[^>]+>", "", text)
-    text = re.sub(r"&nbsp;|&amp;|&lt;|&gt;", " ", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
 
-def fetch_rss_items(feed_url, limit=5):
+def fetch_rss_items(feed_url, limit=3):
     try:
         raw = fetch_url(feed_url)
         root = ET.fromstring(raw)
         items = []
 
         for item in root.iter("item"):
-            title = clean_html(item.findtext("title", "").strip())
-            desc = clean_html(item.findtext("description", "").strip())
-            link = item.findtext("link", "").strip()
+            title = clean_html(item.findtext("title", ""))
+            desc = clean_html(item.findtext("description", ""))
+            link = item.findtext("link", "")
 
             if title and link:
                 items.append({
                     "title": title,
-                    "description": desc[:500],
+                    "description": desc[:400],
                     "link": link
                 })
 
@@ -55,37 +52,45 @@ def fetch_rss_items(feed_url, limit=5):
                 break
 
         return items
-
-    except Exception as e:
-        print(f"[erro RSS] {e}")
+    except:
         return []
 
 
 def rewrite_with_gemini(title, description, link):
-    if not GEMINI_API_KEY:
-        return None
-
     prompt = f"""
-Você é um redator profissional de tecnologia no Brasil.
+Você é um desenvolvedor brasileiro escrevendo um blog pessoal de tecnologia.
 
-Transforme a notícia abaixo em um artigo ORIGINAL, claro e interessante.
+Escreva um post no estilo:
+- primeira pessoa
+- opinativo
+- natural (como alguém explicando experiência própria)
+- com títulos e subtítulos em markdown (##)
+
+ESTILO:
+- parecido com um relato pessoal
+- simples de ler
+- organizado
+- com opinião sincera
+- nada robótico
+
+ESTRUTURA:
+- introdução pessoal
+- explicação do tema
+- comparação ou análise
+- conclusão com opinião
 
 REGRAS:
-- Escreva 100% em português brasileiro
-- NÃO use HTML
-- NÃO copie o texto original
-- Explique de forma simples
-- 300 a 500 palavras
-- Gere título chamativo
-- Gere descrição curta (até 160 caracteres)
-- Gere 3 a 5 tags
+- português brasileiro
+- NÃO usar HTML
+- usar markdown
+- entre 400 e 800 palavras
 
 DADOS:
 Título: {title}
 Resumo: {description}
 Link: {link}
 
-Responda apenas JSON válido:
+Retorne JSON:
 
 {{
   "title": "",
@@ -102,13 +107,8 @@ Responda apenas JSON válido:
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
     try:
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"}
-        )
-
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read().decode())
 
         text = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -116,42 +116,28 @@ Responda apenas JSON válido:
 
         return json.loads(text)
 
-    except Exception as e:
-        print(f"[erro Gemini] {e}")
+    except:
         return None
+
+
+def safe(text):
+    return str(text).replace('"', '\\"').replace("\n", " ").strip()
 
 
 def slugify(text):
     text = text.lower()
-    text = re.sub(r"[áàãâä]", "a", text)
-    text = re.sub(r"[éèêë]", "e", text)
-    text = re.sub(r"[íìîï]", "i", text)
-    text = re.sub(r"[óòõôö]", "o", text)
-    text = re.sub(r"[úùûü]", "u", text)
-    text = re.sub(r"[ç]", "c", text)
     text = re.sub(r"[^a-z0-9]+", "-", text)
     return text.strip("-")[:60]
-
-
-def safe_yaml(text: str) -> str:
-    if not text:
-        return ""
-    text = str(text)
-    text = text.replace('"', '\\"')
-    text = text.replace("\n", " ")
-    text = text.replace(":", " -")
-    return text.strip()
 
 
 def write_post(post):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    title = safe_yaml(post["title"])
-    description = safe_yaml(post["description"])
+    title = safe(post["title"])
+    description = safe(post["description"])
     slug = slugify(title)
 
-    tags_list = post.get("tags", ["tecnologia"])
-    tags = "\n".join(f'  - "{safe_yaml(t)}"' for t in tags_list)
+    tags = "\n".join(f'  - "{safe(t)}"' for t in post.get("tags", ["tecnologia"]))
 
     content = f"""---
 title: "{title}"
@@ -173,54 +159,31 @@ pubDate: {today}
     print(f"[OK] {path}")
 
 
-def fallback_post(item):
-    return {
-        "title": item["title"],
-        "description": item["description"][:120],
-        "tags": ["tecnologia"],
-        "body": f"{item['description']}\n\nFonte: {item['link']}"
-    }
-
-
 def main():
-    all_items = []
+    items = []
 
     for feed in RSS_FEEDS:
-        all_items.extend(fetch_rss_items(feed, 3))
+        items.extend(fetch_rss_items(feed))
 
-    seen = set()
-    selected = []
+    if not items:
+        print("Nenhuma notícia encontrada")
+        return
 
-    for item in all_items:
-        key = item["title"][:80]
-        if key not in seen:
-            seen.add(key)
-            selected.append(item)
+    item = items[0]  # 🔥 pega só UMA notícia
 
-        if len(selected) >= MAX_POSTS:
-            break
+    print(f"Gerando post para: {item['title']}")
 
-    print(f"{len(selected)} notícias encontradas")
+    result = rewrite_with_gemini(
+        item["title"],
+        item["description"],
+        item["link"]
+    )
 
-    count = 0
+    if not result:
+        print("Erro na IA")
+        return
 
-    for item in selected:
-        print(f"Processando: {item['title'][:60]}...")
-
-        result = rewrite_with_gemini(
-            item["title"],
-            item["description"],
-            item["link"]
-        )
-
-        if not result:
-            print("[fallback usado]")
-            result = fallback_post(item)
-
-        write_post(result)
-        count += 1
-
-    print(f"{count} posts gerados com sucesso")
+    write_post(result)
 
 
 if __name__ == "__main__":
