@@ -13,10 +13,12 @@ RSS_FEEDS = [
     "https://www.theverge.com/rss/index.xml",
 ]
 
-MAX_POSTS = 1  # 🔥 AGORA APENAS 1 POST
+MAX_POSTS = 1
 
 
+# ── Utils ─────────────────────────────────────────────
 def fetch_url(url):
+    print(f"[fetch] {url}")
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=15) as resp:
         return resp.read().decode("utf-8", errors="replace")
@@ -51,38 +53,28 @@ def fetch_rss_items(feed_url, limit=3):
             if len(items) >= limit:
                 break
 
+        print(f"[rss] {feed_url} -> {len(items)} itens")
         return items
-    except:
+
+    except Exception as e:
+        print(f"[erro RSS] {e}")
         return []
 
 
 def rewrite_with_gemini(title, description, link):
+    if not GEMINI_API_KEY:
+        print("[erro] GEMINI_API_KEY não encontrada")
+        return None
+
     prompt = f"""
-Você é um desenvolvedor brasileiro escrevendo um blog pessoal de tecnologia.
+Você é um desenvolvedor brasileiro escrevendo um blog pessoal.
 
-Escreva um post no estilo:
-- primeira pessoa
-- opinativo
-- natural (como alguém explicando experiência própria)
-- com títulos e subtítulos em markdown (##)
-
-ESTILO:
-- parecido com um relato pessoal
-- simples de ler
-- organizado
-- com opinião sincera
-- nada robótico
-
-ESTRUTURA:
-- introdução pessoal
-- explicação do tema
-- comparação ou análise
-- conclusão com opinião
+Escreva um post em primeira pessoa, estilo experiência pessoal.
 
 REGRAS:
 - português brasileiro
-- NÃO usar HTML
-- usar markdown
+- sem HTML
+- usar markdown (##)
 - entre 400 e 800 palavras
 
 DADOS:
@@ -90,8 +82,7 @@ Título: {title}
 Resumo: {description}
 Link: {link}
 
-Retorne JSON:
-
+Responda JSON:
 {{
   "title": "",
   "description": "",
@@ -108,16 +99,43 @@ Retorne JSON:
 
     try:
         req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode())
 
         text = data["candidates"][0]["content"]["parts"][0]["text"]
         text = re.sub(r"```json|```", "", text).strip()
 
-        return json.loads(text)
+        result = json.loads(text)
+        print("[gemini] sucesso")
+        return result
 
-    except:
+    except Exception as e:
+        print(f"[erro Gemini] {e}")
         return None
+
+
+def fallback_post(item):
+    print("[fallback] usando fallback")
+
+    return {
+        "title": item["title"],
+        "description": item["description"][:120],
+        "tags": ["tecnologia"],
+        "body": f"""### Minha visão sobre isso
+
+Vi recentemente essa notícia:
+
+**{item['title']}**
+
+{item['description']}
+
+Confesso que achei interessante, principalmente porque esse tipo de coisa mostra como a tecnologia está evoluindo rápido.
+
+Ainda não é algo que eu use diretamente no dia a dia, mas dá pra ver que isso pode impactar bastante coisa no futuro.
+
+Fonte: {item['link']}
+"""
+    }
 
 
 def safe(text):
@@ -156,22 +174,27 @@ pubDate: {today}
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    print(f"[OK] {path}")
+    print(f"[OK] post criado: {path}")
 
 
+# ── MAIN ─────────────────────────────────────────────
 def main():
-    items = []
+    print("🔍 Buscando notícias...")
+
+    all_items = []
 
     for feed in RSS_FEEDS:
-        items.extend(fetch_rss_items(feed))
+        items = fetch_rss_items(feed)
+        all_items.extend(items)
 
-    if not items:
-        print("Nenhuma notícia encontrada")
+    print(f"[total] {len(all_items)} itens encontrados")
+
+    if not all_items:
+        print("[erro] nenhum item encontrado")
         return
 
-    item = items[0]  # 🔥 pega só UMA notícia
-
-    print(f"Gerando post para: {item['title']}")
+    item = all_items[0]
+    print(f"[usando] {item['title']}")
 
     result = rewrite_with_gemini(
         item["title"],
@@ -180,8 +203,7 @@ def main():
     )
 
     if not result:
-        print("Erro na IA")
-        return
+        result = fallback_post(item)
 
     write_post(result)
 
