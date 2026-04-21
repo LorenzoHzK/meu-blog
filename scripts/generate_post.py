@@ -58,11 +58,12 @@ def fetch_rss_items(feed_url):
         return []
 
 
-# ── Gemini (ULTRA DENSO) ─────────────────────────────
+# ── Gemini (OBRIGATÓRIO) ─────────────────────────────
 def rewrite_with_gemini(items):
     if not GEMINI_API_KEY:
-        print("[erro] sem API KEY")
-        return None
+        raise Exception("❌ GEMINI_API_KEY não encontrada")
+
+    print("[debug] API KEY OK")
 
     noticias = "\n\n".join([
         f"Título: {i['title']}\nResumo: {i['description']}\nLink: {i['link']}"
@@ -72,58 +73,30 @@ def rewrite_with_gemini(items):
     prompt = f"""
 Você é um desenvolvedor brasileiro escrevendo um blog pessoal.
 
-Seu objetivo NÃO é resumir notícias.
-Seu objetivo é ESCREVER UM ARTIGO PROFUNDO, detalhado e opinativo.
+REGRAS:
+- Português brasileiro obrigatório
+- Proibido inglês
+- Texto longo (mínimo 1500 palavras)
+- Estilo humano
+- Conteúdo técnico + opinião
 
-━━━━━━━━━━━━━━━━━━━
-⚠️ REGRAS ABSOLUTAS
-━━━━━━━━━━━━━━━━━━━
+Estrutura:
+- Introdução
+- Para cada notícia:
+  - explicação detalhada
+  - como funciona
+  - opinião
+  - impacto
+- Conclusão
 
-- Escreva 100% em português brasileiro
-- Proibido usar inglês
-- Proibido escrever pouco
-- Proibido ser superficial
-- Escreva como se fosse SUA opinião real
-
-━━━━━━━━━━━━━━━━━━━
-📏 TAMANHO
-━━━━━━━━━━━━━━━━━━━
-
-- MÍNIMO: 2000 palavras
-- Conteúdo denso e explicativo
-
-━━━━━━━━━━━━━━━━━━━
-🧠 ESTRUTURA
-━━━━━━━━━━━━━━━━━━━
-
-## Introdução
-- Contextualização real
-
-## Para CADA notícia:
-
-### O que aconteceu
-### Como isso funciona
-### Minha opinião
-### Impacto real
-### Exemplo prático
-
-## Conclusão
-
-━━━━━━━━━━━━━━━━━━━
-📥 NOTÍCIAS
-━━━━━━━━━━━━━━━━━━━
-
+NOTÍCIAS:
 {noticias}
 
-━━━━━━━━━━━━━━━━━━━
-📤 FORMATO
-━━━━━━━━━━━━━━━━━━━
-
-Retorne JSON válido:
+Retorne SOMENTE JSON válido:
 
 {{
   "title": "Resumo semanal de tecnologia",
-  "description": "Resumo detalhado das principais notícias de tecnologia",
+  "description": "Resumo detalhado das notícias",
   "tags": ["tecnologia", "ia"],
   "body": "conteúdo completo em markdown"
 }}
@@ -132,12 +105,13 @@ Retorne JSON válido:
     payload = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
-            "temperature": 0.85,
+            "temperature": 0.8,
             "maxOutputTokens": 4096
         }
     }).encode("utf-8")
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    # 🔥 versão gratuita mais estável
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
     try:
         req = urllib.request.Request(
@@ -149,60 +123,37 @@ Retorne JSON válido:
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read().decode())
 
+        print("[debug] resposta recebida do Gemini")
+
         text = data["candidates"][0]["content"]["parts"][0]["text"]
+
+        # limpa markdown
         text = re.sub(r"```json|```", "", text).strip()
 
-        result = json.loads(text)
+        # 🔥 extrai JSON mesmo se vier texto junto
+        match = re.search(r"\{.*\}", text, re.DOTALL)
 
-        if len(result["body"].split()) < 1200:
-            print("[gemini] conteúdo fraco")
-            return None
+        if not match:
+            print(text)
+            raise Exception("❌ Gemini não retornou JSON válido")
 
-        print("[gemini] sucesso")
+        json_text = match.group(0)
+
+        try:
+            result = json.loads(json_text)
+        except Exception as e:
+            print(json_text)
+            raise Exception(f"❌ Erro ao parsear JSON: {e}")
+
+        if len(result["body"].split()) < 800:
+            raise Exception("❌ Conteúdo muito curto (Gemini falhou)")
+
+        print("[gemini] sucesso total")
         return result
 
     except Exception as e:
-        print(f"[erro Gemini] {e}")
-        return None
-
-
-# ── Fallback MULTI ─────────────────────────────────────
-def fallback_post(items):
-    print("[fallback] multi notícia")
-
-    body = "## Resumo semanal de tecnologia\n\n"
-
-    for item in items:
-        body += f"""
----
-
-## {item['title']}
-
-### O que aconteceu
-
-{item['description']}
-
-### Minha visão
-
-Essa notícia mostra como a tecnologia continua evoluindo rápido.
-
-Mesmo sendo algo simples à primeira vista, isso pode ter impacto direto no mercado.
-
-### Impacto
-
-- Mudança no comportamento digital
-- Crescimento da IA
-- Novas oportunidades
-
-Fonte: {item['link']}
-"""
-
-    return {
-        "title": "Resumo semanal de tecnologia",
-        "description": "Principais notícias da semana",
-        "tags": ["tecnologia"],
-        "body": body
-    }
+        print(f"[ERRO GEMINI REAL] {e}")
+        raise e  # 🔥 AGORA QUEBRA DE VERDADE
 
 
 # ── Writer ────────────────────────────────────────────
@@ -244,27 +195,18 @@ def main():
         all_items.extend(fetch_rss_items(feed))
 
     if not all_items:
-        print("[erro] sem notícias")
-        post = fallback_post([{
-            "title": "Tecnologia em evolução",
-            "description": "Semana sem dados relevantes",
-            "link": "#"
-        }])
-        write_post(post)
-        return
+        raise Exception("❌ Nenhuma notícia encontrada")
 
     items = all_items[:MAX_ITEMS]
 
     print(f"[usando] {len(items)} notícias")
 
+    # 🔥 AGORA É OBRIGATÓRIO FUNCIONAR
     post = rewrite_with_gemini(items)
-
-    if not post:
-        post = fallback_post(items)
 
     write_post(post)
 
-    print("✅ FINALIZADO")
+    print("✅ FINALIZADO COM SUCESSO")
 
 
 if __name__ == "__main__":
