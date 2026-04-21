@@ -10,7 +10,7 @@ OUTPUT_DIR = "src/content/post"
 
 RSS_FEEDS = [
     "https://feeds.feedburner.com/TechCrunch",
-    "https://www.theverge.com/rss/index.xml",
+    "https://www.theverge.com/rss/full.xml",
 ]
 
 MAX_ITEMS = 4
@@ -111,8 +111,7 @@ Retorne SOMENTE JSON válido:
     }).encode("utf-8")
 
     # 🔥 versão gratuita mais estável
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-
+url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
     try:
         req = urllib.request.Request(
             url,
