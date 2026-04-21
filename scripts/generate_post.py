@@ -110,8 +110,9 @@ Retorne SOMENTE JSON válido:
         }
     }).encode("utf-8")
 
-    # 🔥 versão gratuita mais estável
-url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
+    # ✅ AGORA CORRETO
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
+
     try:
         req = urllib.request.Request(
             url,
@@ -126,10 +127,8 @@ url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash
 
         text = data["candidates"][0]["content"]["parts"][0]["text"]
 
-        # limpa markdown
         text = re.sub(r"```json|```", "", text).strip()
 
-        # 🔥 extrai JSON mesmo se vier texto junto
         match = re.search(r"\{.*\}", text, re.DOTALL)
 
         if not match:
@@ -145,14 +144,14 @@ url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash
             raise Exception(f"❌ Erro ao parsear JSON: {e}")
 
         if len(result["body"].split()) < 800:
-            raise Exception("❌ Conteúdo muito curto (Gemini falhou)")
+            raise Exception("❌ Conteúdo muito curto")
 
         print("[gemini] sucesso total")
         return result
 
     except Exception as e:
         print(f"[ERRO GEMINI REAL] {e}")
-        raise e  # 🔥 AGORA QUEBRA DE VERDADE
+        raise e
 
 
 # ── Writer ────────────────────────────────────────────
@@ -200,7 +199,6 @@ def main():
 
     print(f"[usando] {len(items)} notícias")
 
-    # 🔥 AGORA É OBRIGATÓRIO FUNCIONAR
     post = rewrite_with_gemini(items)
 
     write_post(post)
