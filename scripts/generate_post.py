@@ -5,24 +5,32 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
-# ── Config ─────────────────────────────────────────────────────────────────────
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OUTPUT_DIR = "src/content/post"
 
 RSS_FEEDS = [
     "https://feeds.feedburner.com/TechCrunch",
-    "https://hnrss.org/frontpage",
     "https://www.theverge.com/rss/index.xml",
+    "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
 ]
 
 MAX_POSTS = 4
 
 
-# ── Utils ──────────────────────────────────────────────────────────────────────
+# ── Helpers ─────────────────────────────────────────────
 def fetch_url(url):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=15) as resp:
         return resp.read().decode("utf-8", errors="replace")
+
+
+def clean_html(text: str) -> str:
+    if not text:
+        return ""
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"&nbsp;|&amp;|&lt;|&gt;", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 
 def fetch_rss_items(feed_url, limit=5):
@@ -32,8 +40,8 @@ def fetch_rss_items(feed_url, limit=5):
         items = []
 
         for item in root.iter("item"):
-            title = item.findtext("title", "").strip()
-            desc = item.findtext("description", "").strip()
+            title = clean_html(item.findtext("title", "").strip())
+            desc = clean_html(item.findtext("description", "").strip())
             link = item.findtext("link", "").strip()
 
             if title and link:
@@ -58,18 +66,32 @@ def rewrite_with_gemini(title, description, link):
         return None
 
     prompt = f"""
-Reescreva como post de blog em português:
+Você é um redator profissional de tecnologia no Brasil.
 
+Transforme a notícia abaixo em um artigo ORIGINAL, claro e interessante.
+
+REGRAS:
+- Escreva 100% em português brasileiro
+- NÃO use HTML
+- NÃO copie o texto original
+- Explique de forma simples
+- 300 a 500 palavras
+- Gere título chamativo
+- Gere descrição curta (até 160 caracteres)
+- Gere 3 a 5 tags
+
+DADOS:
 Título: {title}
 Resumo: {description}
 Link: {link}
 
-Responda em JSON:
+Responda apenas JSON válido:
+
 {{
-"title": "",
-"description": "",
-"tags": [],
-"body": ""
+  "title": "",
+  "description": "",
+  "tags": [],
+  "body": ""
 }}
 """
 
@@ -90,8 +112,8 @@ Responda em JSON:
             data = json.loads(resp.read().decode())
 
         text = data["candidates"][0]["content"]["parts"][0]["text"]
-
         text = re.sub(r"```json|```", "", text).strip()
+
         return json.loads(text)
 
     except Exception as e:
@@ -111,14 +133,13 @@ def slugify(text):
     return text.strip("-")[:60]
 
 
-# 🔥 FUNÇÃO CRÍTICA — evita quebrar YAML
 def safe_yaml(text: str) -> str:
     if not text:
         return ""
     text = str(text)
     text = text.replace('"', '\\"')
     text = text.replace("\n", " ")
-    text = text.replace(":", " -")  # evita quebra de YAML
+    text = text.replace(":", " -")
     return text.strip()
 
 
@@ -130,7 +151,7 @@ def write_post(post):
     slug = slugify(title)
 
     tags_list = post.get("tags", ["tecnologia"])
-    tags = "\n".join(f"  - \"{safe_yaml(t)}\"" for t in tags_list)
+    tags = "\n".join(f'  - "{safe_yaml(t)}"' for t in tags_list)
 
     content = f"""---
 title: "{title}"
@@ -161,7 +182,6 @@ def fallback_post(item):
     }
 
 
-# ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     all_items = []
 
